@@ -1,21 +1,256 @@
-MIT License
+# Talexis — AI Interview Platform
 
-Copyright (c) 2026 Rohan Kharche
+> Practice smarter. Interview better.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Talexis is a full-stack AI-powered interview practice platform featuring real-time gesture analysis, adaptive question generation, ATS resume scoring, and a customizable interview pipeline builder.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+---
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+## Table of Contents
+
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [Vision Service (Python Backend)](#vision-service-python-backend)
+- [Key Pages & Flows](#key-pages--flows)
+- [Architecture Overview](#architecture-overview)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## Features
+
+- **Adaptive AI Interviews** — Questions generated dynamically by Google Gemini 2.0 Flash, adapting in real time to the candidate's previous answers
+- **Real-time Gesture Analysis** — Python/OpenCV backend analyzes webcam feed over WebSocket to score attention, eye contact, and posture
+- **Voice Input** — Built-in Web Speech API integration for hands-free spoken answers
+- **Code Editor** — Embedded Monaco editor with multi-language support (Python, JavaScript, C++, Java, Go) and live code execution via the Piston API
+- **ATS Resume Checker** — Upload a PDF or Word resume and receive an ATS compatibility score with section-level feedback
+- **Interview Pipeline Builder** — Drag-and-drop style editor to create multi-stage interview workflows (AI screening → deep interview → human round)
+- **Proctoring** — Tab-switch detection with progressive warnings (3 strikes terminates the session)
+- **Supabase Auth & Data** — Email/password authentication, user profiles, and interview history stored in Supabase
+- **Dark Mode** — Full light/dark theme support via CSS variables and `next-themes`
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 18, TypeScript, Vite |
+| Styling | Tailwind CSS, shadcn/ui, Framer Motion |
+| State / Data | TanStack Query, React Hook Form, Zod |
+| Auth & DB | Supabase (PostgreSQL + Auth) |
+| AI / LLM | Google Gemini 2.0 Flash (`generativelanguage` REST API) |
+| Code Execution | Piston API (`emkc.org`) |
+| Code Editor | Monaco Editor (`@monaco-editor/react`) |
+| Vision Backend | Python, FastAPI, OpenCV, WebSocket |
+| Routing | React Router v6 |
+| Charts | Recharts |
+
+---
+
+## Project Structure
+
+```
+├── src/
+│   ├── components/
+│   │   ├── auth/          # AuthLayout
+│   │   ├── ui/            # shadcn/ui primitives
+│   │   ├── CodeEditor.tsx # Monaco + Piston execution
+│   │   └── Layout.tsx
+│   ├── hooks/
+│   │   ├── useAuth.ts     # Supabase session management
+│   │   └── useUserStats.ts
+│   ├── lib/
+│   │   ├── aiService.ts       # Gemini API — question generation & evaluation
+│   │   ├── gestureAnalysis.ts # WebSocket client for vision service
+│   │   ├── supabaseClient.ts
+│   │   └── utils.ts
+│   ├── pages/
+│   │   ├── Index.tsx          # Landing page
+│   │   ├── Login.tsx
+│   │   ├── Signup.tsx
+│   │   ├── Dashboard.tsx
+│   │   ├── InterviewSetup.tsx # Role, level, pipeline, permissions
+│   │   ├── Interview.tsx      # Live interview session
+│   │   ├── ATSChecker.tsx
+│   │   └── PipelineBuilder.tsx
+│   ├── App.tsx
+│   └── index.css              # Design system (CSS variables)
+└── backend/
+    └── vision_service/
+        ├── app.py             # FastAPI + OpenCV gesture analysis
+        └── requirements.txt
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js ≥ 18
+- npm or yarn
+- Python ≥ 3.10 (for vision service)
+- A [Supabase](https://supabase.com) project
+- A [Google AI Studio](https://aistudio.google.com) API key
+
+### 1. Install frontend dependencies
+
+```bash
+npm install
+```
+
+### 2. Configure environment variables
+
+Create a `.env` file in the project root (see [Environment Variables](#environment-variables)).
+
+### 3. Start the development server
+
+```bash
+npm run dev
+```
+
+The app will be available at `http://localhost:8080`.
+
+### 4. Start the vision service (optional)
+
+```bash
+cd backend/vision_service
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app:app --host 0.0.0.0 --port 8001 --reload
+```
+
+> Gesture analysis degrades gracefully to a warning state when the vision service is unavailable.
+
+---
+
+## Environment Variables
+
+Create a `.env` file at the project root:
+
+```env
+# Supabase
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+
+# Google Gemini
+VITE_GEMINI_API_KEY=your-gemini-api-key
+
+# Vision Service (optional, defaults to ws://localhost:8001/ws/gesture)
+VITE_GESTURE_WS_URL=ws://localhost:8001/ws/gesture
+```
+
+### Supabase Schema
+
+You'll need the following tables in your Supabase project:
+
+```sql
+-- User profiles
+create table profiles (
+  id uuid references auth.users primary key,
+  full_name text,
+  email text,
+  avatar_url text,
+  created_at timestamptz default now()
+);
+
+-- Interview history
+create table interviews (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users,
+  position text,
+  score integer,
+  status text default 'completed',
+  created_at timestamptz default now()
+);
+```
+
+---
+
+## Vision Service (Python Backend)
+
+The vision service runs as a FastAPI WebSocket server. It accepts base64-encoded JPEG frames and returns a gesture analysis result.
+
+**Request:**
+```json
+{ "image": "data:image/jpeg;base64,..." }
+```
+
+**Response:**
+```json
+{
+  "attention": "good|warning|poor",
+  "eyeContact": "good|warning|poor",
+  "posture": "good|warning|poor",
+  "faceDetected": true,
+  "confidence": 0.75,
+  "details": ["motion=0.002", "face=yes streak=5/0"]
+}
+```
+
+Face detection uses OpenCV's Haar Cascade classifier. Scores are computed from motion level, face position relative to frame center, and face area ratio.
+
+---
+
+## Key Pages & Flows
+
+### `/interview-setup`
+Three-step wizard:
+1. **Role selection** — Choose from 8 roles (Frontend, Backend, ML, DevOps, HR, Product, Tech Lead, Full Stack)
+2. **Pipeline configuration** — Enable/disable and time interview stages
+3. **Permissions** — Camera and microphone grant, readiness check
+
+### `/interview`
+Live session page featuring:
+- Webcam feed with gesture scoring sidebar
+- Adaptive question display (behavioral / technical / programming tabs)
+- Monaco code editor for programming questions
+- Voice-to-text answer input
+- Per-question AI evaluation with strengths, weaknesses, and suggestions
+- Tab-switch proctoring with escalating warnings
+
+### `/ats-checker`
+Upload a PDF or Word resume → receive an overall ATS score (0–100) broken down into Keywords, Formatting, Experience, and Skills sections, plus prioritized improvement suggestions.
+
+### `/pipeline-builder`
+Visual multi-stage pipeline editor. Supports five stage types: AI Screening, AI Deep Interview, Code Challenge, Human Interview, ATS Review. Pipelines can be saved, duplicated, and loaded.
+
+---
+
+## Architecture Overview
+
+```
+Browser
+  ├── React SPA (Vite)
+  │     ├── Supabase JS SDK  ──────────► Supabase (Auth + PostgreSQL)
+  │     ├── Gemini REST API  ──────────► Google AI (question gen / eval)
+  │     ├── Piston REST API  ──────────► Code execution sandbox
+  │     └── WebSocket client ──────────► Vision Service
+  │
+  └── Vision Service (FastAPI)
+        └── OpenCV Haar Cascade (face detection + motion analysis)
+```
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feat/your-feature`
+3. Commit your changes: `git commit -m "feat: add your feature"`
+4. Push to the branch: `git push origin feat/your-feature`
+5. Open a pull request
+
+Please follow existing code style (TypeScript strict-ish, ESLint config in `eslint.config.js`).
+
+---
+
+## License
+
+MIT © 2026 Rohan Kharche — see [LICENSE](./LICENSE) for details.
